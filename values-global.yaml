@@ -7,29 +7,18 @@ global:
     installPlanApproval: Automatic
 
   datacenter:
-    storageClassName: gp3-csi
+    storageClassName: ocs-storagecluster-cephfs
 
   xraylab:
     namespace: "xraylab-1"
 
-    s3:
-      # Values for S3 bucket access
-      # bucketSource: "provide s3 bucket name where images are stored"
-      bucketSource: validated-patterns-md-xray
-      # Bucket base name used for image-generator
-      bucketBaseName: "xray-source"
+  s3:
+    # Values for S3 bucket access
+    bucketSource: md-xray-source
+    bucketBaseName: "xray-source"
 
 main:
   clusterGroupName: hub
   multiSourceConfig:
     enabled: true
     clusterGroupChartVersion: 0.9.*
-
-# Example Configuration
-  #datacenter:
-  #  cloudProvider: aws
-  #  storageClassName: gp2
-  #  region: us-east-1
-  #  clustername: example-sample
-  #  domain: patterns.redhat.com
-
