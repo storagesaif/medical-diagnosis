@@ -7,14 +7,19 @@ global:
     installPlanApproval: Automatic
 
   datacenter:
+    cloudProvider: onprem
     storageClassName: ocs-storagecluster-cephfs
+    region: local
+    clustername: 698664108c217499d011b-xnn2m
+    domain: apps.698664108c217499d011be01.am1.techzone.ibm.com
 
   xraylab:
     namespace: "xraylab-1"
 
   s3:
-    # Values for S3 bucket access
+    # Source bucket that contains the demo X-ray images
     bucketSource: md-xray-source
+    # Bucket base name used by image-generator/image-server apps
     bucketBaseName: "xray-source"
 
 main:
