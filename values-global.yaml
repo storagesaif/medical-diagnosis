@@ -1,63 +1,17 @@
-# Medical Diagnosis Validated Pattern - Configuration File
-# Generated on: Mon Feb  9 15:11:55 CST 2026
-# Cluster: 698664108c217499d011b-xnn2m
-# Domain: apps.698664108c217499d011be01.am1.techzone.ibm.com
-#
-# IMPORTANT: This file has been auto-generated based on your cluster configuration
-# Review carefully before deployment!
-
 global:
-  pattern: medical-diagnosis
-  options:
-    useCSV: False
-    syncPolicy: Automatic
-    installPlanApproval: Automatic
+  pattern: xray
   
   datacenter:
-    # Cloud provider set to onprem for on-premise deployment
+    storageClassName: ocs-storagecluster-cephfs
     cloudProvider: onprem
-    
-    # CRITICAL: Storage class for Ceph RGW (object storage)
-    # Changed from 'cephfs' to 'ceph-rgw' for S3-compatible object storage
-    storageClassName: ocs-storagecluster-ceph-rgw
-    
-    # Region identifier (can be any value for on-prem)
     region: local
-    
-    # Your cluster's infrastructure name
-    clustername: 698664108c217499d011b-xnn2m
-    
-    # Your cluster's application domain
-    domain: apps.698664108c217499d011be01.am1.techzone.ibm.com
-  
-  xraylab:
-    # Namespace where the xraylab application will be deployed
-    namespace: "xraylab-1"
-    
-    # S3/Ceph object storage configuration
-    s3:
-      # Source bucket that contains the demo X-ray images
-      # This should match your ObjectBucketClaim name
-      bucketSource: md-xray-source
-      
-      # Bucket base name used by image-generator/image-server apps
-      bucketBaseName: "xray-source"
-      
-      # Ceph RGW S3-compatible endpoint
-      # Auto-detected from your cluster
-      endpoint: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc:80"
-      
-      # SSL/TLS configuration
-      # Set to false for HTTP (internal cluster communication)
-      # Set to true if using HTTPS with proper certificates
-      useSSL: false
-      
-      # S3 region (required by some S3 clients even for non-AWS deployments)
-      # This is a dummy value for S3 API compatibility
-      region: "us-east-1"
+    clustername: <your-ocp-cluster-name>
+    domain: 698a7c2d3930333074587e84.am1.techzone.ibm.com
 
-main:
-  clusterGroupName: hub
-  multiSourceConfig:
-    enabled: true
-    clusterGroupChartVersion: 0.9.*
+  xraylab:
+    namespace: "xraylab-1"
+
+    s3:
+      bucketSource: "xray-demo-saif-29f2e7e4-5d5a-4760-86fc-0f2a02e79bc4"
+      bucketBaseName: "xray-source"
+      endpoint: "https://s3-openshift-storage.apps.698a7c2d3930333074587e84.am1.techzone.ibm.com"
