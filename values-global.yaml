@@ -1,5 +1,5 @@
 global:
-  pattern: medical-diagnosis   # was: xray  (optional change to silence the warning)
+  pattern: xray   # was: xray  (optional change to silence the warning)
 
   datacenter:
     storageClassName: ocs-storagecluster-cephfs
