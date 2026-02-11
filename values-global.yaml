@@ -1,5 +1,5 @@
 global:
-  pattern: xray   # was: xray  (optional change to silence the warning)
+  pattern: xray
 
   datacenter:
     storageClassName: ocs-storagecluster-cephfs
@@ -10,10 +10,10 @@ global:
 
   xraylab:
     namespace: "xraylab-1"
-s3:
-  bucketSource: "xray-source"
-  bucketBaseName: "xray-source"
-  endpoint: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local"
+    s3:
+      bucketSource: "xray-source"
+      bucketBaseName: "xray-source"
+      endpoint: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local"
 
 main:
   clusterGroupName: hub
