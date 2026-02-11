@@ -10,12 +10,11 @@ global:
 
   xraylab:
     namespace: "xraylab-1"
-    s3:
-      bucketSource: "xray-demo-saif-29f2e7e4-5d5a-4760-86fc-0f2a02e79bc4"
-      bucketBaseName: "xray-source"
-      endpoint: "https://s3-openshift-storage.apps.698a7c2d3930333074587e84.am1.techzone.ibm.com"
+s3:
+  bucketSource: "xray-source"
+  bucketBaseName: "xray-source"
+  endpoint: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local"
 
-# 👇 NEW: required when using the slimmed common/ tree (no embedded Helm charts)
 main:
   clusterGroupName: hub
   multiSourceConfig:
