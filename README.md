@@ -4,64 +4,39 @@
 
 ## Overview
 
-This is a fork of the [Medical Diagnosis Validated Pattern](https://github.com/validatedpatterns/medical-diagnosis) adapted for **on-premise OpenShift clusters using Ceph object storage** (via OpenShift Data Foundation) instead of AWS S3.
+This repository is a comprehensive guide to deploying the **Medical Diagnosis Validated Pattern** on an **on-premise OpenShift cluster using local Ceph object storage** (OpenShift Data Foundation).
 
-The pattern deploys an automated AI/ML pipeline for chest X-ray analysis that identifies signs of pneumonia. It uses GitOps (ArgoCD) to deploy and manage all components.
-
-### Pipeline Architecture
-
-1. X-ray images are stored in a Ceph S3-compatible bucket (`xray-source`)
-2. The `image-generator` reads source images and writes them to the processing bucket, triggering Kafka notifications
-3. A KNative Serving function (`risk-assessment`) runs an ML model to assess pneumonia risk
-4. A **Grafana dashboard** displays the pipeline in real time — incoming images, processed results, anonymized images, and risk distribution metrics
-
-![Pipeline dashboard](doc/dashboard.png)
-
-### Source Image Dataset
-
-The upstream pattern uses the [Chest X-Ray Images (Pneumonia)](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia) dataset hosted in a public AWS S3 bucket (`validated-patterns-md-xray`). The bucket contains two folders that must both be copied to your local Ceph bucket:
-
-| Folder | Description | Approx. Count |
-|--------|-------------|---------------|
-| `PNEUMONIA/` | X-ray images showing signs of pneumonia | ~390 images (28.6 MB) |
-| `NORMAL/` | X-ray images with no abnormalities | ~234 images (17.2 MB) |
-
-Since we are deploying on-prem without AWS, Step 9 of this guide walks you through copying **both folders** into your local Ceph bucket.
+The pattern automates a complete AI/ML pipeline for chest X-ray analysis:
+1. **Source**: Raw X-ray images are uploaded to a Ceph S3 bucket.
+2. **Processing**: An "image-generator" triggers a Kafka event notification.
+3. **Inference**: A KNative Serving (Serverless) function runs a pre-trained ML model to detect pneumonia.
+4. **Results**: Processed images (with bounding boxes) and metadata are stored back in S3 and a PostgreSQL database.
+5. **Visualization**: A Grafana dashboard displays real-time metrics and the processed X-ray results.
 
 ---
 
-## Prerequisites
+## 🚀 Quick Start for First-Time OpenShift Users
 
-- OpenShift Container Platform 4.14+ with cluster-admin access
-- **OpenShift Data Foundation (ODF)** installed and configured with Ceph object storage (RGW)
-- `oc` CLI logged into the cluster
-- `git` CLI
-- `podman` or `docker` (for `pattern.sh`)
-- A GitHub account (to fork this repo)
+### 1. Prerequisites (Setup your Workstation)
+Before starting, ensure you have the following installed:
+- **oc CLI**: Log into your cluster using `oc login`.
+- **git**: To clone this repository.
+- **GitHub Account**: To fork this repository for your own deployment.
+- **OpenShift Cluster (4.14+)**: You should have `cluster-admin` privileges.
+- **ODF/Ceph**: OpenShift Data Foundation must be installed and a Ceph Object Store (RGW) must be active.
 
----
+### 2. Fork and Clone
+1. Fork this repository on GitHub to your account.
+2. Clone your fork locally:
+   ```bash
+   git clone https://github.com/<your-username>/medical-diagnosis.git
+   cd medical-diagnosis
+   ```
 
-## Deployment Steps
-
-### Step 1: Fork and Clone the Repository
-
+### 3. Extract Ceph Credentials
+The deployment needs to talk to your local S3 storage. Generate/Retrieve a Ceph user:
 ```bash
-# Fork this repo on GitHub, then clone your fork
-git clone git@github.com:<your-github-username>/medical-diagnosis.git
-cd medical-diagnosis
-```
-
-### Step 2: Get Your Ceph Object Storage Credentials
-
-You need S3-compatible credentials for the Ceph Object Gateway (RGW) in your cluster. If you already have credentials, skip to the next step.
-
-To create a CephObjectStoreUser and retrieve credentials:
-
-```bash
-# Check if a CephObjectStoreUser already exists
-oc get cephobjectstoreuser -n openshift-storage
-
-# If not, create one
+# Create the user if it doesn't exist
 cat <<EOF | oc apply -f -
 apiVersion: ceph.rook.io/v1
 kind: CephObjectStoreUser
@@ -73,31 +48,15 @@ spec:
   displayName: "XRay Lab User"
 EOF
 
-# Retrieve the credentials
-oc get secret rook-ceph-object-user-ocs-storagecluster-cephobjectstore-xraylab-user \
-  -n openshift-storage -o jsonpath='{.data.AccessKey}' | base64 -d && echo
-oc get secret rook-ceph-object-user-ocs-storagecluster-cephobjectstore-xraylab-user \
-  -n openshift-storage -o jsonpath='{.data.SecretKey}' | base64 -d && echo
+# Get the credentials
+ACCESS_KEY=$(oc get secret rook-ceph-object-user-ocs-storagecluster-cephobjectstore-xraylab-user -n openshift-storage -o jsonpath='{.data.AccessKey}' | base64 -d)
+SECRET_KEY=$(oc get secret rook-ceph-object-user-ocs-storagecluster-cephobjectstore-xraylab-user -n openshift-storage -o jsonpath='{.data.SecretKey}' | base64 -d)
+echo "Access Key: $ACCESS_KEY"
+echo "Secret Key: $SECRET_KEY"
 ```
 
-Note down the `AccessKey` and `SecretKey` — you'll need them in Step 4.
-
-### Step 3: Get Your Ceph RGW Endpoint
-
-```bash
-# Internal endpoint (used by pods inside the cluster)
-echo "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local"
-
-# External endpoint (for browser access / verification)
-oc get route -n openshift-storage | grep rgw
-```
-
-Verify the RGW is accessible by opening the external `s3-rgw` route URL in your browser. You should see XML output (not an error page). **Accept the self-signed certificate** if prompted — this is required for the Grafana dashboard to display images later.
-
-### Step 4: Configure values-secret-medical-diagnosis.yaml
-
-Create the secrets file in your **home directory** (NOT in the git repo):
-
+### 4. Configure Your Dashboard Secrets
+Create a secrets file in your **home directory** (DO NOT commit this to git):
 ```bash
 cat > ~/values-secret-medical-diagnosis.yaml <<EOF
 version: "2.0"
@@ -106,306 +65,109 @@ secrets:
     fields:
       - name: database-user
         value: xraylab
+      - name: database-password
+        value: xraylab2024!Secure
       - name: database-host
         value: xraylabdb
       - name: database-db
         value: xraylabdb
-      - name: database-master-user
-        value: xraylab
-      - name: database-password
-        value: <choose-a-db-password>
-      - name: database-root-password
-        value: <choose-a-root-password>
-      - name: database-master-password
-        value: <choose-a-master-password>
   - name: s3-secret-bck
     fields:
       - name: AWS_ACCESS_KEY_ID
-        value: <your-ceph-access-key-from-step-2>
+        value: $ACCESS_KEY
       - name: AWS_SECRET_ACCESS_KEY
-        value: <your-ceph-secret-key-from-step-2>
+        value: $SECRET_KEY
+  - name: grafana
+    fields:
+      - name: GF_SECURITY_ADMIN_USER
+        value: admin
+      - name: GF_SECURITY_ADMIN_PASSWORD
+        value: grafana2024!Secure
 EOF
 ```
 
-Replace all `<placeholder>` values with your actual credentials.
-
-### Step 5: Configure values-global.yaml
-
-Edit `values-global.yaml` in the repo with your cluster details:
-
+### 5. Update Global Configuration
+Edit `values-global.yaml` in this repo. Replace the placeholders with your cluster's domain:
 ```yaml
 global:
-  pattern: xray
-
   datacenter:
-    storageClassName: ocs-storagecluster-cephfs
-    cloudProvider: onprem
-    region: local
-    clustername: <your-ocp-cluster-name>
-    domain: <your-cluster-domain>
-
-  xraylab:
-    namespace: "xraylab-1"
-    s3:
-      bucketSource: "xray-source"
-      bucketBaseName: "xray-source"
-      endpoint: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local"
-
-main:
-  clusterGroupName: hub
-  multiSourceConfig:
-    enabled: true
-  clusterGroupChartVersion: 0.9.*
+    clustername: <your-cluster-name>
+    domain: <apps.example.com>
 ```
+*Tip: Run `oc get ingress.config cluster -o jsonpath='{.spec.domain}'` to find your base domain.*
 
-To find your cluster name and domain:
-
-```bash
-oc get ingress.config cluster -o jsonpath='{.spec.domain}' && echo
-# Output example: apps.mycluster.example.com
-# clustername = "mycluster"
-# domain = "example.com"
-# Or if using TechZone: domain = "698a7c2d3930333074587e84.am1.techzone.ibm.com"
-```
-
-### Step 6: Commit and Push Configuration
-
+### 6. Push Changes and Deploy
 ```bash
 git add values-global.yaml
-git commit -m "Configure for on-prem Ceph deployment"
+git commit -m "update cluster domain"
 git push origin main
-```
 
-### Step 7: Deploy the Pattern
-
-```bash
+# Start the deployment
 ./pattern.sh make install
 ```
 
-This will:
-- Install the Validated Patterns Operator
-- Create the Pattern custom resource
-- Deploy ArgoCD applications
-- Create the `xraylab-1` namespace with all components
-
-Monitor the deployment:
-
+### 7. Seed the Data (CRITICAL)
+The pattern is empty until you provide X-ray images. Run this command to copy the 624-image training set from the public AWS bucket to your local Ceph storage:
 ```bash
-# Watch ArgoCD applications
-watch -n 10 'oc get applications -n openshift-gitops'
-
-# Wait for all pods to be running
-watch -n 10 'oc get pods -n xraylab-1'
-```
-
-Wait until the `medical-diagnosis-hub` application shows `Synced` and `Healthy`, and the `bucket-init` job shows `Completed`.
-
-### Step 8: Verify Bucket Initialization
-
-```bash
-oc get jobs -n xraylab-1
-# bucket-init should show STATUS: Complete
-
-oc logs -l job-name=bucket-init -n xraylab-1
-# Should show all 3 buckets created and Kafka notifications configured
-```
-
-Expected output:
-```
-Bucket xray-source was created or already existing and owned by this user.
-Bucket xray-source-processed was created or already existing and owned by this user.
-Bucket xray-source-anonymized was created or already existing and owned by this user.
-SNS topic: xray-images was created or already existing.
-Notification for bucket: xray-source was created or already existing.
-```
-
-### Step 9: Copy X-Ray Images from AWS to Local Ceph Bucket
-
-Since we are not using AWS, the source X-ray images must be copied from the upstream public AWS bucket into your local Ceph bucket. The AWS bucket contains two folders — `PNEUMONIA/` and `NORMAL/` — and **both must be copied** for the pipeline to work correctly.
-
-This one-time step runs a pod inside the cluster that downloads images directly from the public AWS bucket and uploads them to your Ceph bucket.
-
-**Copy all images:**
-
-```bash
-oc run upload-xrays --rm -it --restart=Never \
-  --image=python:3.9-slim -n xraylab-1 -- bash -c "pip install boto3 -q && python3 -c \"
+oc run seed-xrays --rm -it --restart=Never --image=python:3.9-slim -n xraylab-1 -- bash -c "pip install boto3 -q && python3 -c \"
 import boto3
 from botocore import UNSIGNED
 from botocore.config import Config
-
-# Source: upstream public AWS bucket (no credentials needed)
-src = boto3.client('s3', region_name='us-east-1', config=Config(signature_version=UNSIGNED))
-
-# Destination: local Ceph bucket
-dst = boto3.client('s3',
-    endpoint_url='http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local',
-    aws_access_key_id='<your-ceph-access-key>',
-    aws_secret_access_key='<your-ceph-secret-key>')
-
-paginator = src.get_paginator('list_objects_v2')
-total = 0
-
+src = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+dst = boto3.client('s3', endpoint_url='http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local', aws_access_key_id='$ACCESS_KEY', aws_secret_access_key='$SECRET_KEY')
 for folder in ['PNEUMONIA/', 'NORMAL/']:
-    count = 0
-    for page in paginator.paginate(Bucket='validated-patterns-md-xray', Prefix=folder):
-        for obj in page.get('Contents', []):
-            key = obj['Key']
-            data = src.get_object(Bucket='validated-patterns-md-xray', Key=key)['Body'].read()
-            dst.put_object(Bucket='xray-source', Key=key, Body=data)
-            count += 1
-            total += 1
-            if count % 20 == 0:
-                print(f'  [{folder}] Copied {count} images...')
-    print(f'{folder}: {count} images copied.')
-
-print(f'All done! Total: {total} images copied to xray-source bucket.')
+    for obj in src.list_objects_v2(Bucket='validated-patterns-md-xray', Prefix=folder).get('Contents', []):
+        data = src.get_object(Bucket='validated-patterns-md-xray', Key=obj['Key'])['Body'].read()
+        dst.put_object(Bucket='xray-source', Key=obj['Key'], Body=data)
+print('Data Seeding Complete!')
 \""
 ```
 
-**Replace** `<your-ceph-access-key>` and `<your-ceph-secret-key>` with your actual Ceph credentials from Step 2.
+---
 
-This will take several minutes. Wait for it to complete and confirm the total count.
+## 📊 Verification & Access
 
-**Verify the upload:**
+### 🏥 The Grafana Dashboard
+Access the dashboard via the OpenShift App Launcher or the following route:
+- **URL**: `https://xraylab-grafana-route-xraylab-1.<your-domain>`
+- **Username**: `admin`
+- **Password**: `grafana2024!Secure`
 
+> [!IMPORTANT]
+> **SSL Certificate Workaround**: Because we use self-signed certificates for S3 storage, you **MUST** open the S3 RGW Route in your browser first and accept the certificate. Otherwise, Grafana will not be able to display the images.
+> Find the RGW URL with: `oc get route s3-rgw -n openshift-storage`
+
+### 🔍 Checking the Pipeline
+Monitor the logs of the processing engine:
 ```bash
-oc run verify-bucket --rm -it --restart=Never \
-  --image=python:3.9-slim -n xraylab-1 -- bash -c "pip install boto3 -q && python3 -c \"
+oc logs deployment/risk-assessment -n xraylab-1
+```
+Check the processed bucket for results:
+```bash
+oc run list-results --rm -it --image=python:3.9-slim -n xraylab-1 -- bash -c "pip install boto3 -q && python3 -c \"
 import boto3
-s3 = boto3.client('s3',
-    endpoint_url='http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local',
-    aws_access_key_id='<your-ceph-access-key>',
-    aws_secret_access_key='<your-ceph-secret-key>')
-paginator = s3.get_paginator('list_objects_v2')
-for prefix in ['PNEUMONIA/', 'NORMAL/']:
-    count = 0
-    size = 0
-    for page in paginator.paginate(Bucket='xray-source', Prefix=prefix):
-        for obj in page.get('Contents', []):
-            count += 1
-            size += obj['Size']
-    print(f'{prefix}: {count} images, {size/1024/1024:.1f} MB')
+s3 = boto3.client('s3', endpoint_url='...', aws_access_key_id='...', aws_secret_access_key='...')
+objs = s3.list_objects_v2(Bucket='xray-source-processed')['Contents']
+print(f'Detected {len(objs)} processed images in S3.')
 \""
 ```
 
-Expected output:
-```
-PNEUMONIA/: 390 images, 28.6 MB
-NORMAL/: 234 images, 17.2 MB
-```
+---
 
-If counts don't match, re-run the upload command — it is idempotent and will overwrite existing files.
+## 🔧 Troubleshooting
 
-### Step 10: Start the Image Generator
-
-The image-generator deployment starts at 0 replicas by design. Scale it up to begin the AI/ML pipeline:
-
-**Option A — CLI:**
-```bash
-oc scale deployment/image-generator --replicas=1 -n xraylab-1
-```
-
-**Option B — OpenShift Console:**
-1. Switch to **Developer** view → **Topology** → select `xraylab-1` project
-2. Right-click the `image-generator` pod → **Edit Pod count** → set to `1`
-
-### Step 11: Accept SSL Certificates for S3 Route
-
-The Grafana dashboard loads images directly from the S3 RGW route. With self-signed certificates, your browser will block these images unless you accept the certificate.
-
-```bash
-oc get route -n openshift-storage | grep s3-rgw
-```
-
-Open the `s3-rgw` route URL in your browser and **accept the self-signed certificate**.
-
-### Step 12: View the Grafana Dashboard
-
-1. In the OpenShift Console, click the app launcher (nine-dots menu) → **Grafana**
-2. Or get the route directly:
-   ```bash
-   oc get route -n xraylab-1 | grep grafana
-   ```
-3. In Grafana, go to **Dashboards** → `xraylab-1` folder → **XRay Lab**
-
-Within 5–10 minutes of scaling up image-generator, you should see:
-- Incoming images counter increasing
-- Processed images with risk assessment results
-- Anonymized images (PII stripped)
-- Distribution chart showing Normal / Unsure / Pneumonia detected
-- CPU and memory metrics for risk-assessment pods
+| Issue | Solution |
+|-------|----------|
+| **"CreateContainerConfigError" on Grafana** | Ensure the `grafana-creds` secret exists. Re-run `make load-secrets`. |
+| **Empty Dashboard Panels** | 1. Scaled up `image-generator`? 2. Accepted the S3 RGW SSL certificate in your browser? 3. Seeded the images? |
+| **ArgoCD OutOfSync** | Use the ArgoCD UI or `oc patch` to force a sync on the `xraylab-grafana-dashboards` app. |
 
 ---
 
-## Key Files Modified for On-Prem Ceph
-
-These are the files changed from the [upstream pattern](https://github.com/validatedpatterns/medical-diagnosis) to support on-prem Ceph instead of AWS:
-
-| File | Change |
-|------|--------|
-| `values-global.yaml` | Ceph endpoint, on-prem storage class, local bucket names |
-| `charts/all/medical-diagnosis/image-generator/templates/image-generator-buckets-cm.yaml` | Removed hardcoded `https://s3.amazonaws.com/` prefix from bucket-source |
-| `charts/all/medical-diagnosis/image-generator/templates/image-gen-deployment.yaml` | Changed env vars to use `s3-secret-bck` secret and `service-point`/`buckets-config` configmaps instead of OBC (`md-xray-source`) |
+## 📖 Additional Documentation
+- [Official Pattern Site](https://validatedpatterns.io/patterns/medical-diagnosis/)
+- [Demo Script & Use Case](https://validatedpatterns.io/patterns/medical-diagnosis/demo-script/)
+- [Cluster Sizing Guide](https://validatedpatterns.io/patterns/medical-diagnosis/cluster-sizing/)
 
 ---
-
-## Troubleshooting
-
-### Grafana dashboard is blank
-- Verify image-generator is scaled to 1+: `oc get deployment image-generator -n xraylab-1`
-- Check image-generator logs: `oc logs deployment/image-generator -n xraylab-1`
-- Verify the source bucket has images in both `PNEUMONIA/` and `NORMAL/` folders (see Step 9 verification command)
-- Accept the SSL certificate for the S3 RGW route (see Step 11)
-
-### image-generator CrashLoopBackOff with "NoSuchBucket"
-- Verify buckets exist: `oc logs -l job-name=bucket-init -n xraylab-1`
-- Check the `buckets-config` configmap has correct values: `oc get cm buckets-config -n xraylab-1 -o yaml`
-- Ensure `bucket-source` is just the bucket name (e.g., `xray-source`), not a full URL
-- Restart the deployment after fixing: `oc rollout restart deployment/image-generator -n xraylab-1`
-
-### Bucket-init job fails
-- Check S3 credentials in the `s3-secret-bck` secret
-- Verify the Ceph RGW service is running: `oc get pods -n openshift-storage | grep rgw`
-
-### ArgoCD application not syncing
-- Verify your Git branch matches what the Pattern CR is tracking:
-  ```bash
-  oc get pattern -A -o yaml | grep targetRevision
-  ```
-- Force a sync:
-  ```bash
-  oc patch application medical-diagnosis-hub -n openshift-gitops \
-    --type merge -p '{"operation":{"sync":{"revision":"HEAD"}}}'
-  ```
-
-### S3 credentials invalid (InvalidAccessKeyId)
-- If the cluster was reprovisioned, OBC credentials may have changed
-- Re-retrieve credentials from your CephObjectStoreUser (see Step 2)
-- Update `~/values-secret-medical-diagnosis.yaml` and redeploy
-
----
-
-## Architecture Reference
-
-| Component | Purpose |
-|-----------|---------|
-| `bucket-init` (Job) | Creates S3 buckets and configures Kafka notifications on Ceph RGW |
-| `image-generator` (Deployment) | Reads X-ray images from source bucket and writes to processing bucket |
-| `risk-assessment` (KNative Service) | ML model that assesses pneumonia risk from X-ray images |
-| `xraylabdb` (Deployment) | PostgreSQL database storing processing results |
-| `xray-cluster` (Kafka) | AMQ Streams Kafka cluster for event notifications |
-| `xraylab-grafana` (Deployment) | Grafana instance with pre-configured dashboard |
-| `kafdrop` (Deployment) | Kafka topic browser (optional, for debugging) |
-
----
-
-## Credits
-
-- Original pattern: [Red Hat Validated Patterns — Medical Diagnosis](https://validatedpatterns.io/patterns/medical-diagnosis/)
-- X-ray dataset: [Chest X-Ray Images (Pneumonia)](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia)
-- Upstream repository: [validatedpatterns/medical-diagnosis](https://github.com/validatedpatterns/medical-diagnosis)
-
-## License
-
-[Apache-2.0](LICENSE)
+*Created by the Red Hat Edge & AI Team.*
