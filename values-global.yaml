@@ -11,7 +11,7 @@ global:
   xraylab:
     namespace: "xraylab-1"
     s3:
-      bucketSource: "xray-source"
+      bucketSource: "https://s3.amazonaws.com/validated-patterns-md-xray"
       bucketBaseName: "xray-source"
       endpoint: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local"
 
