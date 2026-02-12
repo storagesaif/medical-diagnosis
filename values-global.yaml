@@ -1,22 +1,33 @@
 global:
   pattern: xray
 
+  options:
+    useCSV: False
+    syncPolicy: Automatic
+    installPlanApproval: Automatic
+
   datacenter:
-    storageClassName: ocs-storagecluster-cephfs
-    cloudProvider: onprem
-    region: local
-    clustername: 698d25073fd906765b7d10d0
-    domain: 698d25073fd906765b7d10d0.am1.techzone.ibm.com
+    cloudProvider: none
+    storageClassName: "ocs-storagecluster-cephfs"
+    region: ""
+    clustername: ""
+    domain: ""
 
   xraylab:
     namespace: "xraylab-1"
+
     s3:
-      bucketSource: "https://s3.amazonaws.com/validated-patterns-md-xray"
+      bucketSource: "xray-source"
       bucketBaseName: "xray-source"
-      endpoint: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local"
+      endpoint: "http://rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc:80"
+      s3ForcePathStyle: true
+      signatureVersion: "s3v4"
+      useSSL: false
+      verifySSL: false
+      region: "us-east-1"
 
 main:
   clusterGroupName: hub
   multiSourceConfig:
     enabled: true
-  clusterGroupChartVersion: 0.9.*
+    clusterGroupChartVersion: 0.9.*
