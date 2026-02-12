@@ -5,8 +5,8 @@ global:
     storageClassName: ocs-storagecluster-cephfs
     cloudProvider: onprem
     region: local
-    clustername: 698ce1e8f3779983c4ab115a
-    domain: 698a7c2d3930333074587e84.am1.techzone.ibm.com
+    clustername: 698d25073fd906765b7d10d0
+    domain: 698d25073fd906765b7d10d0.am1.techzone.ibm.com
 
   xraylab:
     namespace: "xraylab-1"
