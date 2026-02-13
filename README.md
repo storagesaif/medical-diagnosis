@@ -1,4 +1,4 @@
-# Medical Diagnosis — Beginner's Deployment Guide (On-Prem Ceph)
+# Medical Diagnosis —  Deployment Guide (IBM Fusion - Ceph)
 
 This guide walks you through deploying the **Medical Diagnosis Validated Pattern** on a fresh OpenShift cluster. 
 
